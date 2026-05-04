@@ -134,6 +134,43 @@ class JupyterManager(QMainWindow):
                 )
 
 
+    def refresh_git_config(self):
+        """Refresh git configuration for current workspace"""
+        workspace = self.workspace_path.text()
+    
+        # Delete the bash script's saved config
+        git_config = Path.home() / ".jupyter_git_config"
+        if git_config.exists():
+            git_config.unlink()
+            self.log_output(f"✅ Cleared old git config cache for workspace: {workspace}")
+    
+        # Get the actual git remote from the workspace
+        if os.path.exists(os.path.join(workspace, ".git")):
+            result = subprocess.run(
+                "git config --get remote.origin.url",
+                shell=True, 
+                cwd=workspace,
+                capture_output=True, 
+                text=True
+            )
+            if result.stdout:
+                remote_url = result.stdout.strip()
+                self.log_output(f"📍 Workspace git remote: {remote_url}")
+            
+                # Update the bash script's config with the correct repo
+                with open(git_config, 'w') as f:
+                    f.write(f"""# Jupyter Git Auto-Push Configuration
+                    # Last updated: {datetime.now()}
+                    GITHUB_REPO="{remote_url}"
+                    CURRENT_BRANCH="master"
+                    """)
+                self.log_output(f"✅ Updated git config with: {remote_url}")
+            else:
+                self.log_output(f"⚠️  No git remote found in {workspace}")
+        else:
+            self.log_output(f"⚠️  Not a git repository: {workspace}")
+
+
 
     def setup_ui(self):
         """Setup the UI"""
@@ -249,6 +286,14 @@ class JupyterManager(QMainWindow):
         output_layout.addWidget(self.container_output)
         output_group.setLayout(output_layout)
         right_layout.addWidget(output_group)
+        refresh_layout = QHBoxLayout()
+        refresh_btn = QPushButton("🔄 Refresh Git Config")
+        refresh_btn.clicked.connect(self.refresh_git_config)
+        refresh_btn.setStyleSheet("background-color: #2196F3; font-weight: bold;")
+        refresh_layout.addStretch()
+        refresh_layout.addWidget(refresh_btn)
+        refresh_layout.addStretch()
+        layout.addLayout(refresh_layout)
         
         # Add panels
         layout.addWidget(left_panel, stretch=1)
@@ -675,6 +720,7 @@ class JupyterManager(QMainWindow):
         if os.path.exists(self.workspace_path.text()):
             os.chdir(self.workspace_path.text())
             self.save_config()
+            self.refresh_git_config()
             self.log_output(f"Workspace changed to {self.workspace_path.text()}")
             self.update_status()
         else:
@@ -706,8 +752,13 @@ class JupyterManager(QMainWindow):
                 # Change to workspace
                 if os.path.exists(self.workspace_path.text()):
                     os.chdir(self.workspace_path.text())
+                    self.refresh_git_config()
             except:
                 pass
+        else:
+            # No config file, use current directory
+            self.workspace_path.setText(os.getcwd())
+            self.refresh_git_config()  # ← ADD THIS LINE
                 
     def save_config(self):
         """Save configuration"""
