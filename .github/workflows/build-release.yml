@@ -1,0 +1,62 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers when you push tags like v1.0.0, v2.1.0, etc.
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller PyQt5
+    
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --onefile \
+          --name jupyter_manager \
+          --add-data "scripts:scripts" \
+          --add-data "polkit_setup.py:." \
+          --hidden-import PyQt5 \
+          --hidden-import PyQt5.QtCore \
+          --hidden-import PyQt5.QtGui \
+          --hidden-import PyQt5.QtWidgets \
+          --collect-all PyQt5 \
+          jupyter_manager.py
+    
+    - name: Create release package
+      run: |
+        cd dist
+        # Create tar.gz archive
+        tar -czf jupyter_manager_linux_amd64.tar.gz jupyter_manager
+        # Create zip archive
+        zip jupyter_manager_linux_amd64.zip jupyter_manager
+        # Generate checksum
+        sha256sum jupyter_manager_linux_amd64.tar.gz > checksums.txt
+        sha256sum jupyter_manager_linux_amd64.zip >> checksums.txt
+        cd ..
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/jupyter_manager_linux_amd64.tar.gz
+          dist/jupyter_manager_linux_amd64.zip
+          dist/checksums.txt
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
